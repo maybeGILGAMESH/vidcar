@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vidcar-gpu-worker"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+video = ["opencv-python-headless"]
+paddle = ["paddlepaddle"]
+test = ["pytest"]
+
+[project.scripts]
+gpu-worker = "gpu_worker.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["../../tests/gpu"]

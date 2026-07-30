@@ -1,0 +1,10 @@
+{
+  "schema_version": "model-manifest-1",
+  "pipeline_version": "vehicle-pipeline-0.1.0-baseline",
+  "models": {},
+  "ocr_capability": {
+    "mode": "latin",
+    "production_russian_ocr": false,
+    "translation": "latin_to_russian_plate_lookalikes"
+  }
+}

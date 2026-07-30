@@ -1,0 +1,481 @@
+name: vidcar
+
+x-common-env: &common-env
+  env_file:
+    - path: ./.env.example
+      required: true
+    - path: ./.env
+      required: false
+  restart: unless-stopped
+
+x-python-service: &python-service
+  <<: *common-env
+  build:
+    context: ../..
+    dockerfile: services/probe-worker/Dockerfile
+  image: vidcar-python-worker:0.1.0
+  init: true
+  environment:
+    PYTHONPATH: /app:/app/services/scheduler:/app/services/probe-worker:/app/services/result-writer
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - "print('ok')"
+    interval: 30s
+    timeout: 5s
+    retries: 5
+    start_period: 15s
+
+x-worker-environment: &worker-environment
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-vidcar-local-dev}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+
+x-gpu-worker: &gpu-worker
+  <<: *common-env
+  build:
+    context: ../..
+    dockerfile: services/gpu-worker/Dockerfile
+  image: vidcar-gpu-worker:0.1.0
+  init: true
+  working_dir: /app/services/gpu-worker
+  environment:
+    <<: *worker-environment
+    WORKER_ID: ${GPU_WORKER_ID:-gpu-main}
+    MODEL_APPROVED_ROOT: /opt/vehicle-ai/model-registry/approved
+    NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+    NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+  volumes:
+    - type: bind
+      source: ${SCRATCH_ROOT:-../../.runtime/scratch}
+      target: /srv/vehicle-ai/scratch
+    - type: bind
+      source: ${MODEL_APPROVED_ROOT:-../../.runtime/model-registry/approved}
+      target: /opt/vehicle-ai/model-registry/approved
+      read_only: true
+    - model-cache:/opt/vehicle-ai/model-cache
+  networks:
+    - worker
+    - observability
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: ${GPU_COUNT:-1}
+            capabilities: [gpu]
+
+services:
+  nginx:
+    <<: *common-env
+    image: nginx:1.27.3-alpine
+    ports:
+      - "${HTTP_BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - edge
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    <<: *common-env
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    image: vidcar-web:0.1.0
+    networks:
+      - edge
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  api:
+    <<: *common-env
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    image: vidcar-api:0.1.0
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://vidcar:local-dev-postgres-change-me@postgres:5432/vidcar}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080/auth}
+      AUTO_CREATE_SCHEMA: ${AUTO_CREATE_SCHEMA:-true}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v1/integrations/external-database/health', timeout=2)"
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    networks:
+      - edge
+      - database
+      - worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  keycloak:
+    <<: *common-env
+    image: keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-vidcar}
+      KC_DB_USERNAME: ${POSTGRES_USER:-vidcar}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres-change-me}
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-local-dev-keycloak-change-me}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ../keycloak/realm-vidcar.json:/opt/keycloak/data/import/realm-vidcar.json:ro
+    networks:
+      - edge
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9000'"
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  postgres:
+    <<: *common-env
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vidcar}
+      POSTGRES_USER: ${POSTGRES_USER:-vidcar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/001-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  rabbitmq:
+    <<: *common-env
+    image: rabbitmq:4.0.5-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-vidcar}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-dev-rabbitmq-change-me}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-vidcar}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ../rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - worker
+      - observability
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  minio:
+    <<: *common-env
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    profiles: [dev]
+    command: server /data --console-address :9001
+    ports:
+      - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+    volumes:
+      - minio-data:/data
+    networks:
+      - worker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+    profiles: [dev]
+    restart: "no"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+    volumes:
+      - ../storage/init-buckets.sh:/init-buckets.sh:ro
+    entrypoint: ["/bin/sh", "/init-buckets.sh"]
+    networks:
+      - worker
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  scheduler:
+    <<: *python-service
+    working_dir: /app
+    command:
+      - celery
+      - -A
+      - vidcar_scheduler.app.celery_app
+      - worker
+      - --beat
+      - --loglevel=INFO
+      - -Q
+      - scheduler
+    environment:
+      PYTHONPATH: /app:/app/services/scheduler:/app/services/probe-worker:/app/services/result-writer
+      DATABASE_URL: ${DATABASE_URL:-postgresql://vidcar:local-dev-postgres-change-me@postgres:5432/vidcar}
+      CELERY_BROKER_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+    networks:
+      - database
+      - worker
+      - observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  probe-worker:
+    <<: *python-service
+    working_dir: /app
+    command:
+      - celery
+      - -A
+      - vidcar_probe_worker.tasks.celery_app
+      - worker
+      - --loglevel=INFO
+      - -Q
+      - probe
+    environment:
+      <<: *worker-environment
+      PYTHONPATH: /app:/app/services/scheduler:/app/services/probe-worker:/app/services/result-writer
+      WORKER_ID: probe-main
+      CELERY_BROKER_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://vidcar:local-dev-postgres-change-me@postgres:5432/vidcar}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+    networks:
+      - worker
+      - database
+      - observability
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  gpu-worker:
+    <<: *gpu-worker
+    profiles: [gpu]
+
+  gpu-worker-node:
+    <<: *gpu-worker
+    profiles: [worker-node]
+    environment:
+      <<: *worker-environment
+      WORKER_ID: ${GPU_WORKER_ID:-gpu-remote}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+
+  result-writer:
+    <<: *python-service
+    working_dir: /app
+    command:
+      - celery
+      - -A
+      - vidcar_result_writer.writer.celery_app
+      - worker
+      - --loglevel=INFO
+      - -Q
+      - result-writer
+    environment:
+      PYTHONPATH: /app:/app/services/scheduler:/app/services/probe-worker:/app/services/result-writer
+      DATABASE_URL: ${DATABASE_URL:-postgresql://vidcar:local-dev-postgres-change-me@postgres:5432/vidcar}
+      CELERY_BROKER_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://vidcar:local-dev-rabbitmq-change-me@rabbitmq:5672/vidcar}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-vidcar-local-dev}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-local-dev-minio-change-me}
+    networks:
+      - database
+      - worker
+      - observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    profiles: [monitoring]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "promtool", "check", "healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:3.3.2
+    profiles: [monitoring]
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ../monitoring/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    profiles: [monitoring]
+    restart: unless-stopped
+    user: "0:0"
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ../monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-data:/run/promtail
+    networks:
+      - observability
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9080/ready | grep -q Ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-dev-grafana-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    networks:
+      - edge
+      - observability
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q 'ok'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  edge:
+    name: vidcar-edge
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+  database:
+    name: vidcar-database
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.11.0/24
+  worker:
+    name: vidcar-worker
+    ipam:
+      config:
+        - subnet: 172.30.12.0/24
+  observability:
+    name: vidcar-observability
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.13.0/24
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  minio-data:
+  model-cache:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  promtail-data:

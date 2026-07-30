@@ -1,0 +1,46 @@
+{
+  "archives": [
+    {
+      "archive_valid": true,
+      "member_count": 4,
+      "path": "/opt/vehicle-ai/model-registry/staging/ch_pp-ocrv3_det_infer.tar.gz",
+      "read_only": true,
+      "sha256": "acc7eb42b299cdb4eed2999f4de99c89555767b321c272a9878f688d24503fd9",
+      "size_bytes": 2265330,
+      "unsafe_members": []
+    },
+    {
+      "archive_valid": true,
+      "member_count": 4,
+      "path": "/opt/vehicle-ai/model-registry/staging/ch_pp-ocrv3_rec_infer.tar.gz",
+      "read_only": true,
+      "sha256": "bb459e79debf7b2c1ba40ccff6d20741fab6e762688073c6edad1a67bbdc139a",
+      "size_bytes": 9458292,
+      "unsafe_members": []
+    },
+    {
+      "archive_valid": true,
+      "member_count": 5,
+      "path": "/opt/vehicle-ai/model-registry/staging/mot_ppyoloe_l_36e_ppvehicle.zip",
+      "read_only": true,
+      "sha256": "89253e5a46061d726949983b1b5db4aa10a7e0117c9629a949b6ed57d0eb17d7",
+      "size_bytes": 190831568,
+      "unsafe_members": []
+    },
+    {
+      "archive_valid": true,
+      "member_count": 5,
+      "path": "/opt/vehicle-ai/model-registry/staging/vehicle_attribute_model.zip",
+      "read_only": true,
+      "sha256": "3e687207dfac519e76351cd8e08716e15a075f61e4b2ba0f3d4d2abbe9627192",
+      "size_bytes": 6357599,
+      "unsafe_members": []
+    }
+  ],
+  "inspection_mode": "read_only",
+  "promotion_blocker": "license/source metadata must be supplied and reviewed",
+  "promotion_eligible": false,
+  "promotion_performed": false,
+  "schema_version": "staging-validation-1",
+  "staging_root": "/opt/vehicle-ai/model-registry/staging"
+}

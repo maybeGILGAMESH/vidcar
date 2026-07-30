@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidcar.local/schemas/tensorrt-build-metadata-1.json",
+  "title": "Reproducible TensorRT engine build metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "source_model", "source_sha256", "engine_sha256",
+    "tensorrt_version", "cuda_version", "driver_version", "gpu",
+    "precision", "profiles", "build_command", "built_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "tensorrt-build-metadata-1"},
+    "source_model": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "engine_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tensorrt_version": {"type": "string"},
+    "cuda_version": {"type": "string"},
+    "driver_version": {"type": "string"},
+    "gpu": {"type": "string"},
+    "compute_capability": {"type": "string"},
+    "precision": {"enum": ["fp32", "fp16", "int8"]},
+    "calibration_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["input", "min", "opt", "max"],
+        "properties": {
+          "input": {"type": "string"},
+          "min": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+          "opt": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+          "max": {"type": "array", "items": {"type": "integer", "minimum": 1}}
+        }
+      }
+    },
+    "build_command": {"type": "array", "items": {"type": "string"}},
+    "built_at": {"type": "string", "format": "date-time"},
+    "builder_host": {"type": "string"}
+  }
+}

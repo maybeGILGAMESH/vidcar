@@ -1,0 +1,53 @@
+VEHICLE AI OPERATOR EVIDENCE
+captured_at: 2026-07-30T16:00:54+03:00
+node_role: main
+hostname: Node7
+
+[operating_system]
+description: Ubuntu 24.04.3 LTS
+release: 24.04
+codename: noble
+kernel: 6.14.0-37-generic
+architecture: x86_64
+
+[gpu]
+name: NVIDIA GeForce RTX 3090
+memory_total_mib: 24576
+driver_version: 570.172.08
+driver_reported_cuda_version: 12.8
+nvidia_smi_status: available
+
+[compute]
+logical_cpu_count: 32
+ram_total_observed: 31 GiB
+swap_total_observed: 8 GiB
+
+[storage]
+device: /dev/nvme0n1
+device_size_observed: 953.9 GiB
+root_filesystem: /dev/nvme0n1p2
+root_size_observed: 937 GiB
+root_available_observed: 405 GiB
+scratch_path: /srv/vehicle-ai/scratch
+scratch_path_status: not_verified
+central_storage_status: not_configured
+
+[network]
+interface: eno1
+observed_address: 10.162.1.93/16
+address_status: observed_dhcp_not_approved_for_production
+vpn_interface_observed: tun2
+
+[containers]
+docker_status: command_not_found
+docker_compose_status: unavailable
+
+[capture_notes]
+Commands were run without sudo and without changing the system:
+hostname; uname -a; lsb_release -a; nvidia-smi; nproc; free -h;
+lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS; df -h; ip -br address;
+ip route; docker version
+
+This file is evidence for the current machine only. It does not prove that
+Docker, NVIDIA Container Toolkit, DeepStream, S3, models, scratch directories,
+or production network policy are ready.

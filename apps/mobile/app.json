@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Vidcar",
+    "slug": "vidcar",
+    "version": "0.1.0",
+    "scheme": "vidcar",
+    "orientation": "portrait",
+    "plugins": [
+      ["expo-location", { "locationWhenInUsePermission": "Разрешите определить место обследования." }],
+      ["expo-image-picker", { "photosPermission": "Разрешите выбрать видео обследования." }],
+      "expo-secure-store"
+    ],
+    "ios": { "supportsTablet": true, "bundleIdentifier": "local.vidcar.mobile" },
+    "android": { "package": "local.vidcar.mobile" }
+  }
+}

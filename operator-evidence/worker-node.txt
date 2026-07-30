@@ -1,0 +1,22 @@
+VEHICLE AI OPERATOR EVIDENCE — PLACEHOLDER ONLY
+node_role: worker
+status: NOT_PROVIDED
+evidence_valid: false
+
+hostname: replace_me
+operating_system: replace_me
+kernel: replace_me
+gpu: replace_me
+gpu_memory: replace_me
+driver: replace_me
+cpu: replace_me
+ram: replace_me
+scratch_storage: replace_me
+network: replace_me
+docker: replace_me
+nvidia_container_runtime: replace_me
+
+BLOCKER: no worker node or command output was provided.
+Do not treat this file as proof of readiness and do not enable the worker.
+Replace this entire placeholder with operator-captured evidence after running
+the approved hardware, storage, network, Docker, and GPU checks on that node.

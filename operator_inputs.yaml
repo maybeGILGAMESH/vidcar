@@ -1,0 +1,72 @@
+project:
+  name: vehicle-video-platform
+  environment: pilot
+
+main_node:
+  hostname: Node7
+  ip_address: 10.162.1.93
+  ip_address_status: observed_dhcp_not_approved
+  operating_system: ubuntu_24_04
+  gpu_model: NVIDIA_GeForce_RTX_3090
+  gpu_memory_gb: 24
+  cpu_logical_cores: 32
+  ram_gb_approx: 31
+  scratch_disk: /srv/vehicle-ai/scratch
+  scratch_disk_status: not_configured
+  docker_status: installed_local_pilot
+  docker_note: Compose profiles dev,gpu used on Node7; worker_node still missing
+
+worker_node:
+  status: not_provided
+  hostname: replace_me
+  ip_address: replace_me
+  operating_system: ubuntu_24_04
+  gpu_model: replace_me
+  gpu_memory_gb: null
+  ram_gb: null
+  scratch_disk: /srv/vehicle-ai/scratch
+
+network:
+  storage_bandwidth_gbps: null
+  private_subnet: replace_me
+  public_domain: replace_me
+
+storage:
+  status: not_configured
+  type: s3
+  endpoint: replace_me
+  region: replace_me
+  capacity_tb: 60
+  versioning_enabled: null
+  object_lock_enabled: null
+  backup_target: replace_me
+  bucket_originals: vehicle-originals
+  bucket_derived: vehicle-derived
+  bucket_results: vehicle-results
+  bucket_models: vehicle-models
+
+models:
+  status: not_provided
+  approved_root: /opt/vehicle-ai/model-registry/approved
+  checksums_file: /opt/vehicle-ai/model-registry/sha256sums-2026-07-29.txt
+
+external_database:
+  enabled: false
+  mode: stub
+  state: dns_nxdomain
+  web_url: http://file-ai.rudn.su
+  direct_web_url: http://file-ai-srv.rudn.su:8000
+  login_hint: admin@localhost.local
+  db_type: unknown
+  db_host: null
+  db_port: null
+  db_name: null
+  db_user: null
+  db_password_file: null
+  db_sslmode: null
+
+security:
+  secrets_root: /etc/vehicle-ai/secrets
+  public_postgres: false
+  public_rabbitmq: false
+  gpu_worker_database_access: false

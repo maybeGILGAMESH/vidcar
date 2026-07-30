@@ -1,0 +1,45 @@
+{
+  "schema_version": "model-manifest-1",
+  "pipeline_version": "vehicle-pipeline-0.1.0",
+  "ocr_capability": {
+    "mode": "latin",
+    "production_russian_ocr": false,
+    "alphabet_allowlist_latin": "0123456789ABCEHKMOPTXY",
+    "alphabet_allowlist_russian": "0123456789АВЕКМНОРСТУХ",
+    "translation": "latin_to_russian_plate_lookalikes"
+  },
+  "models": {
+    "vehicle_detector": {
+      "name": "ppvehicle-detector",
+      "version": "0.1.0",
+      "path": "vehicle-detector/0.1.0/model.zip",
+      "sha256": "89253e5a46061d726949983b1b5db4aa10a7e0117c9629a949b6ed57d0eb17d7",
+      "source": "https://bj.bcebos.com/v1/paddledet/models/pipeline/mot_ppyoloe_l_36e_ppvehicle.zip",
+      "license": "Apache-2.0/upstream-paddle"
+    },
+    "vehicle_attributes": {
+      "name": "vehicle-attributes",
+      "version": "0.1.0",
+      "path": "vehicle-attributes/0.1.0/model.zip",
+      "sha256": "3e687207dfac519e76351cd8e08716e15a075f61e4b2ba0f3d4d2abbe9627192",
+      "source": "https://bj.bcebos.com/v1/paddledet/models/pipeline/vehicle_attribute_model.zip",
+      "license": "Apache-2.0/upstream-paddle"
+    },
+    "plate_detector": {
+      "name": "plate-detector-baseline",
+      "version": "0.1.0",
+      "path": "plate-detector-baseline/0.1.0/model.tar.gz",
+      "sha256": "acc7eb42b299cdb4eed2999f4de99c89555767b321c272a9878f688d24503fd9",
+      "source": "https://bj.bcebos.com/v1/paddledet/models/pipeline/ch_PP-OCRv3_det_infer.tar.gz",
+      "license": "Apache-2.0/upstream-paddle"
+    },
+    "plate_ocr": {
+      "name": "plate-ocr-baseline-latin",
+      "version": "0.1.0",
+      "path": "plate-ocr-baseline-latin/0.1.0/model.tar.gz",
+      "sha256": "bb459e79debf7b2c1ba40ccff6d20741fab6e762688073c6edad1a67bbdc139a",
+      "source": "https://bj.bcebos.com/v1/paddledet/models/pipeline/ch_PP-OCRv3_rec_infer.tar.gz",
+      "license": "Apache-2.0/upstream-paddle"
+    }
+  }
+}

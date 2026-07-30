@@ -1,0 +1,53 @@
+{
+  "realm": "vidcar",
+  "displayName": "Vehicle AI",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "human-admin" },
+      { "name": "api-service" },
+      { "name": "result-writer" },
+      { "name": "gpu-worker" },
+      { "name": "backup-service" },
+      { "name": "monitoring" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "vidcar-web",
+      "name": "Vidcar web application",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "protocol": "openid-connect",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "vidcar-api",
+      "name": "Vidcar API audience",
+      "enabled": true,
+      "bearerOnly": true,
+      "protocol": "openid-connect"
+    }
+  ],
+  "scopeMappings": [],
+  "defaultDefaultClientScopes": [
+    "profile",
+    "email",
+    "roles",
+    "web-origins"
+  ]
+}
