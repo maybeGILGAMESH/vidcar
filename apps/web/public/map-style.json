@@ -1,0 +1,24 @@
+{
+  "version": 8,
+  "name": "vidcar-osm-raster",
+  "sources": {
+    "osm-raster": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "© OpenStreetMap contributors",
+      "maxzoom": 19
+    }
+  },
+  "layers": [
+    {
+      "id": "osm-raster-layer",
+      "type": "raster",
+      "source": "osm-raster",
+      "minzoom": 0,
+      "maxzoom": 19
+    }
+  ]
+}

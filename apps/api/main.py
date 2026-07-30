@@ -76,11 +76,15 @@ def _default_storage() -> ObjectStorage:
     endpoint = os.getenv("S3_ENDPOINT")
     if not endpoint or endpoint == "replace_me":
         return MemoryObjectStorage()
+    access_key = os.getenv("S3_ACCESS_KEY_ID") or os.getenv("S3_ACCESS_KEY")
+    secret_key = os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("S3_SECRET_KEY")
+    public_endpoint = os.getenv("S3_PUBLIC_ENDPOINT") or endpoint
     return Boto3ObjectStorage(
         endpoint_url=endpoint,
+        public_endpoint_url=public_endpoint,
         region_name=os.getenv("S3_REGION"),
-        aws_access_key_id=os.getenv("S3_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("S3_SECRET_ACCESS_KEY"),
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
     )
 
 
@@ -119,7 +123,11 @@ def create_app(
         x_user_email: str | None = Header(default=None),
     ) -> User:
         if not x_user_id:
-            raise HTTPException(status_code=401, detail="X-User-ID is required (OIDC proxy subject)")
+            if os.getenv("DEMO_AUTH_BYPASS", "false").lower() in {"1", "true", "yes"}:
+                x_user_id = os.getenv("DEMO_USER_ID", "demo-operator")
+                x_user_email = x_user_email or os.getenv("DEMO_USER_EMAIL", "demo@localhost")
+            else:
+                raise HTTPException(status_code=401, detail="X-User-ID is required (OIDC proxy subject)")
         user = db.get(User, x_user_id)
         if user is None:
             user = User(id=x_user_id, email=x_user_email)

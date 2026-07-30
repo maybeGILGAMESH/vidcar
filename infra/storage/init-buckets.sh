@@ -19,4 +19,4 @@ do
   mc anonymous set none "$alias_name/$bucket"
 done
 
-printf 'MinIO development buckets initialized with versioning and private access.\n'
+printf 'MinIO development buckets initialized (CORS via MINIO_API_CORS_ALLOW_ORIGIN).\n'

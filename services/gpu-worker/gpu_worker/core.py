@@ -317,6 +317,7 @@ class PlateAdapter:
         self.ocr, self.detector = ocr, detector
 
     def analyze(self, vehicle_crop: Any) -> dict[str, Any]:
+        fallback_full_crop = False
         if self.detector is None:
             plate_crop, bbox, confidence = vehicle_crop, None, 0.0
         else:
@@ -325,12 +326,21 @@ class PlateAdapter:
                 return {
                     "bbox": None,
                     "detection_confidence": 0.0,
+                    "fallback_full_crop": False,
                     "ocr": asdict(OCRResult("", "", 0.0, self.ocr.mode)),
                 }
-            plate_crop, bbox, confidence = detected
+            # Support PlateDetection dataclass or legacy (crop, bbox, conf) tuple.
+            if hasattr(detected, "crop"):
+                plate_crop = detected.crop
+                bbox = detected.bbox
+                confidence = float(detected.confidence)
+                fallback_full_crop = bool(getattr(detected, "fallback_full_crop", False))
+            else:
+                plate_crop, bbox, confidence = detected
         return {
             "bbox": bbox,
             "detection_confidence": float(confidence),
+            "fallback_full_crop": fallback_full_crop,
             "ocr": asdict(self.ocr.recognize(plate_crop)),
         }
 

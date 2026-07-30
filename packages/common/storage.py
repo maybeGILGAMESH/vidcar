@@ -24,12 +24,34 @@ class ObjectStorage(Protocol):
 
 
 class Boto3ObjectStorage:
-    def __init__(self, client=None, **client_kwargs):
+    def __init__(
+        self,
+        client=None,
+        public_endpoint_url: str | None = None,
+        **client_kwargs,
+    ):
         if client is None:
             import boto3
+            from botocore.config import Config
 
-            client = boto3.client("s3", **client_kwargs)
+            config = Config(signature_version="s3v4", s3={"addressing_style": "path"})
+            client = boto3.client("s3", config=config, **client_kwargs)
         self.client = client
+        # Presign with the browser-reachable endpoint so Host/path match the signed URL.
+        public = public_endpoint_url or client_kwargs.get("endpoint_url")
+        if public and public != client_kwargs.get("endpoint_url"):
+            import boto3
+            from botocore.config import Config
+
+            public_kwargs = dict(client_kwargs)
+            public_kwargs["endpoint_url"] = public
+            self.presign_client = boto3.client(
+                "s3",
+                config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+                **public_kwargs,
+            )
+        else:
+            self.presign_client = client
 
     def create_multipart(self, bucket, key, content_type, metadata):
         result = self.client.create_multipart_upload(
@@ -38,7 +60,7 @@ class Boto3ObjectStorage:
         return result["UploadId"]
 
     def presign_part(self, bucket, key, upload_id, part_number, expires):
-        return self.client.generate_presigned_url(
+        return self.presign_client.generate_presigned_url(
             "upload_part",
             Params={"Bucket": bucket, "Key": key, "UploadId": upload_id, "PartNumber": part_number},
             ExpiresIn=expires,
@@ -48,6 +70,12 @@ class Boto3ObjectStorage:
         return self.client.complete_multipart_upload(
             Bucket=bucket, Key=key, UploadId=upload_id, MultipartUpload={"Parts": parts}
         )
+
+    def put_object(self, bucket: str, key: str, data: bytes, metadata: dict[str, str] | None = None) -> None:
+        kwargs: dict = {"Bucket": bucket, "Key": key, "Body": data}
+        if metadata:
+            kwargs["Metadata"] = metadata
+        self.client.put_object(**kwargs)
 
     def head(self, bucket, key):
         try:
@@ -61,7 +89,7 @@ class Boto3ObjectStorage:
             yield chunk
 
     def presign_get(self, bucket, key, expires):
-        return self.client.generate_presigned_url(
+        return self.presign_client.generate_presigned_url(
             "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires
         )
 

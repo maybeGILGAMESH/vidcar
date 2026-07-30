@@ -6,6 +6,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .core import (
     ByteTrackStyleTracker,
@@ -54,6 +55,23 @@ def inspect_staging(args: argparse.Namespace) -> int:
     return 0 if all(item["archive_valid"] for item in reports) else 2
 
 
+def preflight_paddle(args: argparse.Namespace) -> int:
+    from .paddle_runtime import build_paddle_backends, require_paddle_gpu
+
+    require_paddle_gpu()
+    bundle = build_paddle_backends(Path(args.approved_root), Path(args.manifest))
+    _print(
+        {
+            "ok": True,
+            "paddle_gpu": True,
+            "pipeline_version": bundle.pipeline_version,
+            "model_versions": bundle.model_versions,
+            "detector_backend": bundle.detector.backend_name,
+        }
+    )
+    return 0
+
+
 def demo(args: argparse.Namespace) -> int:
     outputs = []
     for source in args.inputs:
@@ -66,6 +84,8 @@ def demo(args: argparse.Namespace) -> int:
             line_position=args.line_position,
             max_frames=args.max_frames,
             gif_fps=args.gif_fps,
+            approved_root=Path(args.approved_root) if args.approved_root else None,
+            manifest=Path(args.manifest) if args.manifest else None,
         )
         outputs.append(result)
     _print({"ok": True, "demos": outputs})
@@ -74,8 +94,24 @@ def demo(args: argparse.Namespace) -> int:
 
 def smoke(args: argparse.Namespace) -> int:
     source, result_path = Path(args.input), Path(args.result)
-    detector = OpenCVForegroundDetector() if args.backend == "opencv" else DeterministicMockDetector()
-    pipeline = VideoPipeline(detector, ByteTrackStyleTracker(), PlateOCRAdapter(mode=args.ocr_mode))
+    if args.backend == "paddle":
+        from .paddle_runtime import build_paddle_backends
+
+        if not args.approved_root or not args.manifest:
+            raise RuntimeError("paddle smoke requires --approved-root and --manifest")
+        bundle = build_paddle_backends(Path(args.approved_root), Path(args.manifest))
+        pipeline = VideoPipeline(
+            bundle.detector,
+            ByteTrackStyleTracker(),
+            PlateOCRAdapter(bundle.plate_recognizer, mode=args.ocr_mode),
+            plate_detector=bundle.plate_detector,
+        )
+    else:
+        detector: Any = (
+            OpenCVForegroundDetector() if args.backend == "opencv" else DeterministicMockDetector()
+        )
+        pipeline = VideoPipeline(detector, ByteTrackStyleTracker(), PlateOCRAdapter(mode=args.ocr_mode))
+
     probe = pipeline.video.probe(source)
     line_x = probe.width * float(args.line_position)
     result = pipeline.process(source, ((line_x, 0.0), (line_x, float(probe.height))))
@@ -109,12 +145,19 @@ def parser() -> argparse.ArgumentParser:
     inspect.add_argument("--output")
     inspect.set_defaults(handler=inspect_staging)
 
+    preflight = subcommands.add_parser("preflight-paddle")
+    preflight.add_argument("--manifest", required=True)
+    preflight.add_argument("--approved-root", required=True)
+    preflight.set_defaults(handler=preflight_paddle)
+
     run = subcommands.add_parser("smoke")
     run.add_argument("--input", required=True)
     run.add_argument("--result", required=True)
     run.add_argument("--compressed")
     run.add_argument("--cpu-encode", action="store_true")
-    run.add_argument("--backend", choices=("mock", "opencv"), default="mock")
+    run.add_argument("--backend", choices=("mock", "opencv", "paddle"), default="mock")
+    run.add_argument("--approved-root")
+    run.add_argument("--manifest")
     run.add_argument(
         "--ocr-mode",
         choices=("baseline", "latin", "local_allowlist"),
@@ -130,7 +173,17 @@ def parser() -> argparse.ArgumentParser:
     visual = subcommands.add_parser("demo")
     visual.add_argument("--inputs", nargs="+", required=True, help="One or more fixture videos")
     visual.add_argument("--output-dir", required=True)
-    visual.add_argument("--backend", choices=("mock", "opencv"), default="opencv")
+    visual.add_argument("--backend", choices=("mock", "opencv", "paddle"), default="paddle")
+    visual.add_argument(
+        "--approved-root",
+        default=".runtime/model-registry/approved",
+        help="Approved model registry root (required for paddle)",
+    )
+    visual.add_argument(
+        "--manifest",
+        default="models/manifests/vehicle-pipeline-0.1.0.yaml",
+        help="Pipeline manifest with unpacked_dir paths",
+    )
     visual.add_argument(
         "--ocr-mode",
         choices=("baseline", "latin", "local_allowlist"),

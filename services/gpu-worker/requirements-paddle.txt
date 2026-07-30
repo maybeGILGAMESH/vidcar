@@ -1,0 +1,8 @@
+# Paddle Inference GPU stack for local demo / gpu-worker (CUDA 12.6 wheels).
+# Install:
+#   .venv/bin/pip install -r services/gpu-worker/requirements-paddle.txt \
+#     -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+paddlepaddle-gpu==3.0.0
+PyYAML>=6.0,<7
+numpy>=1.24,<3
+opencv-python-headless>=4.8,<5
